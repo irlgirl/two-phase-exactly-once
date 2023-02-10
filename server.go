@@ -2,7 +2,6 @@ package exactly_once
 
 import (
 	"github.com/gammazero/deque"
-	"github.com/stretchr/testify/assert"
 
 	"pgregory.net/rapid"
 )
@@ -97,8 +96,6 @@ func (s *Server) CommitRandom(t *rapid.T) {
   commit := rapid.IntRange(0, s.binlog.uncommited.Len()).Draw(t, "events to commit")
   for i := 0; i < commit; i++ {
     event := s.binlog.uncommited.PopFront()
-
-    assert.NotEqual(t, nil, event)
 
     event.ApplyAfterCommit(s, t)
     s.binlog.commited.PushBack(event)

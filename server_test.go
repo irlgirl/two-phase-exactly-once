@@ -2,7 +2,6 @@ package exactly_once
 
 import (
 	"testing"
-	"github.com/stretchr/testify/assert"
 	"pgregory.net/rapid"
 )
 
@@ -26,8 +25,12 @@ func (m *serverClientMachine) Check(t *rapid.T) {
   for i := 0; i < m.server.applied_cmds.Len(); i++ {
     cmd := m.server.applied_cmds.At(i)
 
-    assert.NotEqual(t, cmd.uuid, last_uuid, "query %v executed twice", cmd.uuid)
-    assert.Greater(t, cmd.uuid, last_uuid)
+    if (cmd.uuid == last_uuid) {
+      t.Fatalf("query %v executed twice", cmd.uuid)
+    }
+    if (cmd.uuid < last_uuid) {
+      t.Fatalf("query with uuid %v executed before %v", last_uuid, cmd.uuid)
+    }
     last_uuid = cmd.uuid
   }
 
@@ -36,7 +39,18 @@ func (m *serverClientMachine) Check(t *rapid.T) {
     return
   }
 
-  assert.Equal(t, m.client.persistent_queries, m.server.applied_cmds)
+  if m.client.persistent_queries.Len() != m.server.applied_cmds.Len() {
+    t.Fatalf("len not matched: client send %v queries, server applied %v queries",
+              m.client.persistent_queries.Len(), m.server.applied_cmds.Len())
+  }
+  for i := 0; i < m.client.persistent_queries.Len(); i++ {
+    sended_query := m.client.persistent_queries.At(i)
+    applied_query := m.server.applied_cmds.At(i)
+    if sended_query != applied_query {
+      t.Fatalf("persisent queries at position %v mismatch: sended %v, applied %v", i, sended_query, applied_query)
+    }
+  }
+
   m.in_sync = false
 }
 
