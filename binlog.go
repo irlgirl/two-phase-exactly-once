@@ -55,11 +55,11 @@ func (e sendQueryCommitEvent) ApplyAfterCommit(s *Server, t *rapid.T) {
 }
 
 func (e createQueryEvent) Apply(s *Server) {
+  s.messages_prepare.PushBack(prepareMsg{msg: e.msg})
+  s.persistent_queries.PushBack(e.msg)
 }
 
 func (e createQueryEvent) ApplyAfterCommit(s *Server, t *rapid.T) {
-  s.messages_prepare.PushBack(prepareMsg{msg: e.msg})
-  s.persistent_queries.PushBack(e.msg)
 }
 
 func (e doCommitQueryEvent) Apply(s *Server) {
