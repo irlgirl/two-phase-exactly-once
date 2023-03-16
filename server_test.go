@@ -1,6 +1,7 @@
 package exactly_once
 
 import (
+  "fmt"
 	"testing"
 	"pgregory.net/rapid"
 )
@@ -19,7 +20,7 @@ func (m *serverClientMachine) Init(t *rapid.T) {
 }
 
 func (m *serverClientMachine) Check(t *rapid.T) {
-  sync_completed := m.client.messages_commit.Len() == 0 && m.client.messages_prepare.Len() == 0
+  sync_completed := m.client.persistent_queries.Len() == m.client.finished_persistent_queries
 
   last_uuid := -1
   for i := 0; i < m.server.applied_cmds.Len(); i++ {
@@ -34,9 +35,12 @@ func (m *serverClientMachine) Check(t *rapid.T) {
     last_uuid = cmd.uuid
   }
 
-  t.Logf("total applied events %v", m.server.applied_cmds.Len())
   if !sync_completed {
     return
+  }
+  if m.server.applied_cmds.Len() > 0 {
+    fmt.Printf("Client-server synchronized!\n")
+    fmt.Printf("Total applied events %v\n", m.server.applied_cmds.Len())
   }
 
   if m.client.persistent_queries.Len() != m.server.applied_cmds.Len() {
@@ -64,7 +68,10 @@ func Truncated(server *Server, t *rapid.T) Server{
   new_server.binlog.commited = server.binlog.commited
   for i := 0; i < new_server.binlog.commited.Len(); i++ {
     event := server.binlog.commited.At(i)
-    event.Apply(&new_server)
+    status := event.Apply(&new_server)
+    if (!status) {
+      t.Fatalf("event.Apply return false")
+    }
     event.ApplyAfterCommit(&new_server, t)
   }
 

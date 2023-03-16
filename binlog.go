@@ -5,7 +5,7 @@ import (
 )
 
 type binlogEvent interface {
-  Apply(*Server)
+  Apply(*Server) bool
   ApplyAfterCommit(*Server, *rapid.T)
 }
 
@@ -32,8 +32,9 @@ type createQueryEvent struct {
   msg queryData
 }
 
-func (m doPrepareQueryEvent) Apply(s *Server) {
+func (m doPrepareQueryEvent) Apply(s *Server) bool {
   s.slots.GetOrAlloc(m.msg, m.slot_suggestion)
+  return true;
 }
 
 func (m doPrepareQueryEvent) ApplyAfterCommit(s *Server, t *rapid.T) {
@@ -43,27 +44,29 @@ func (m doPrepareQueryEvent) ApplyAfterCommit(s *Server, t *rapid.T) {
   s.messages_net.PushBack(msg)
 }
 
-func (e sendQueryCommitEvent) Apply(s *Server) {
+func (e sendQueryCommitEvent) Apply(s *Server) bool {
+  if s.messages_prepare.Len() == 0 || s.messages_prepare.Front().msg != e.msg {
+    return false;
+  }
+  s.messages_prepare.PopFront()
+  return true;
 }
 
 func (e sendQueryCommitEvent) ApplyAfterCommit(s *Server, t *rapid.T) {
-  if s.messages_prepare.Len() == 0 || s.messages_prepare.Front().msg != e.msg {
-    return
-  }
-  s.messages_prepare.PopFront()
   s.messages_commit.PushBack(commitMsg{msg: e.msg, slot: e.slot})
 }
 
-func (e createQueryEvent) Apply(s *Server) {
+func (e createQueryEvent) Apply(s *Server) bool {
   s.messages_prepare.PushBack(prepareMsg{msg: e.msg})
   s.persistent_queries.PushBack(e.msg)
+  return true;
 }
 
 func (e createQueryEvent) ApplyAfterCommit(s *Server, t *rapid.T) {
 }
 
-func (e doCommitQueryEvent) Apply(s *Server) {
-  //
+func (e doCommitQueryEvent) Apply(s *Server) bool {
+  return true;
 }
 
 func (e doCommitQueryEvent) ApplyAfterCommit(s *Server, t *rapid.T) {
@@ -78,13 +81,14 @@ func (e doCommitQueryEvent) ApplyAfterCommit(s *Server, t *rapid.T) {
   s.applied_cmds.PushBack(e.msg)
 }
 
-func (e msgAckEvent) Apply(s *Server) {
+func (e msgAckEvent) Apply(s *Server) bool {
   if s.messages_commit.Len() == 0 || s.messages_commit.Front().msg != e.msg {
-    return
+    return false
   }
   s.messages_commit.PopFront()
+  return true;
 }
 
 func (e msgAckEvent) ApplyAfterCommit(s *Server, t *rapid.T) {
-
+  s.finished_persistent_queries++;
 }

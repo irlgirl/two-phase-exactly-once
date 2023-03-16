@@ -49,6 +49,7 @@ type Server struct {
   messages_commit    *deque.Deque[commitMsg]
   applied_cmds       *deque.Deque[queryData]
   persistent_queries *deque.Deque[queryData]
+  finished_persistent_queries int
 
 
   // "External"
@@ -70,13 +71,16 @@ func NewServer() Server {
     messages_commit: deque.New[commitMsg](),
     applied_cmds: deque.New[queryData](),
     persistent_queries: deque.New[queryData](),
+    finished_persistent_queries : 0,
   }
 }
 
 func (s *Server) HandleMsg(m Message, t *rapid.T) {
   event := m.GenerateEvent()
-  event.Apply(s)
-  s.binlog.Push(event)
+  status := event.Apply(s)
+  if (status) {
+    s.binlog.Push(event)
+  }
 }
 
 func (s *Server) RetryQueries() {
